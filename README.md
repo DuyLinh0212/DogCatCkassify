@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # CNN Dog Cat Classify
 
 Dự án xây dựng mô hình CNN để phân loại ảnh chó và mèo bằng TensorFlow/Keras. Dữ liệu đầu vào được tổ chức theo cấu trúc `processed_dataset`, sau đó được load thành `tf.data.Dataset` với kích thước ảnh chuẩn `224x224x3`.
@@ -81,13 +80,7 @@ dataset_bundle = load_processed_dataset(
 
 Hàm `compile_model_data_parallel()` dùng `tf.distribute.MirroredStrategy` khi Kaggle có nhiều GPU, giúp train data parallel tự động.
 
-## Ghi chú Git
 
-File `.gitignore` hiện chỉ bỏ qua thư mục:
-
-```text
-preprocessing/
-```
 
 Nếu không muốn upload dataset lớn lên Git, cần thêm `processed_dataset/` vào `.gitignore`.
 =======
