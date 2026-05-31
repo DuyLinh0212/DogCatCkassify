@@ -212,7 +212,7 @@ def compile_cnn_model(optimizer_name: str, learning_rate: float):
 
     model.compile(
         optimizer=optimizer,
-        loss="binary_crossentropy",
+        loss=tf.keras.losses.BinaryCrossentropy(label_smoothing=0.05),
         metrics=[
             tf.keras.metrics.BinaryAccuracy(name="accuracy"),
             tf.keras.metrics.Precision(name="precision"),

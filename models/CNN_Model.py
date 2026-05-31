@@ -70,6 +70,12 @@ def build_cnn_model(
         [
             layers.Input(shape=input_shape),
 
+            # Augmentation nhẹ, chỉ hoạt động trong lúc training.
+            layers.RandomFlip("horizontal"),
+            layers.RandomRotation(0.05),
+            layers.RandomZoom(0.10),
+            layers.RandomContrast(0.10),
+
             # Chuẩn hóa pixel từ [0, 255] về [0, 1] ngay trong model.
             layers.Rescaling(1.0 / 255),
 
@@ -105,7 +111,7 @@ def build_cnn_model(
             layers.Dropout(0.35),
 
             layers.GlobalAveragePooling2D(),
-            layers.Dense(256, activation="sigmoid"),
+            layers.Dense(256, activation="swish"),
             layers.BatchNormalization(),
             layers.Dropout(0.45),
             layers.Dense(output_units, activation=output_activation),
