@@ -3,12 +3,18 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import sys
+import time
 from pathlib import Path
+
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
+
+tf.get_logger().setLevel("ERROR")
 
 
 # Cho phép import từ thư mục gốc project
@@ -73,56 +79,65 @@ def _format_learning_rate(optimizer):
     return _format_metric(tf.keras.backend.get_value(learning_rate))
 
 
-class EpochTableLogger(tf.keras.callbacks.Callback):
+class CompactProgressLogger(tf.keras.callbacks.Callback):
     """
-    Print compact epoch metrics as a table instead of Keras progress bars.
+    Print a compact progress bar with only the most useful training metrics.
     """
 
-    columns = [
-        ("epoch", "Epoch", 7),
-        ("loss", "Loss", 9),
-        ("accuracy", "Acc", 8),
-        ("precision", "Prec", 8),
-        ("recall", "Recall", 8),
-        ("f1_score", "F1", 8),
-        ("auc", "AUC", 8),
-        ("val_loss", "ValLoss", 9),
-        ("val_accuracy", "ValAcc", 8),
-        ("val_f1_score", "ValF1", 8),
-        ("lr", "LR", 10),
-    ]
+    def __init__(self, bar_width: int = 24):
+        super().__init__()
+        self.bar_width = bar_width
+        self.total_epochs = 0
+        self.steps = None
+        self.epoch_start_time = 0.0
+        self.current_epoch = 0
 
     def on_train_begin(self, logs=None):
-        print("\nTRAINING LOG")
-        print(self._separator())
-        print(self._row([title for _, title, _ in self.columns]))
-        print(self._separator())
+        self.total_epochs = self.params.get("epochs", 0)
+        self.steps = self.params.get("steps")
+        print("\nTraining progress")
+
+    def on_epoch_begin(self, epoch, logs=None):
+        self.current_epoch = epoch
+        self.epoch_start_time = time.time()
+        self._render(epoch, 0, {})
+
+    def on_train_batch_end(self, batch, logs=None):
+        self._render(self.current_epoch, batch + 1, logs or {})
 
     def on_epoch_end(self, epoch, logs=None):
         logs = logs or {}
-        row_values = []
+        elapsed = time.time() - self.epoch_start_time
+        summary = (
+            f" - val_loss: {_format_metric(logs.get('val_loss'))}"
+            f" - val_acc: {_format_metric(logs.get('val_accuracy'))}"
+            f" - val_f1: {_format_metric(logs.get('val_f1_score'))}"
+            f" - {elapsed:.1f}s"
+        )
+        self._render(epoch, self.steps, logs)
+        print(summary)
 
-        for key, _, _ in self.columns:
-            if key == "epoch":
-                row_values.append(str(epoch + 1))
-            elif key == "lr":
-                row_values.append(_format_learning_rate(self.model.optimizer))
-            else:
-                row_values.append(_format_metric(logs.get(key)))
+    def _render(self, epoch, step, logs):
+        if self.steps:
+            progress = min(step / self.steps, 1.0)
+            filled = int(self.bar_width * progress)
+            bar = "=" * filled + "." * (self.bar_width - filled)
+            step_text = f"{step}/{self.steps}"
+        else:
+            bar = "." * self.bar_width
+            step_text = str(step or 0)
 
-        print(self._row(row_values))
-
-    def on_train_end(self, logs=None):
-        print(self._separator())
-
-    def _separator(self):
-        return "+".join("-" * (width + 2) for _, _, width in self.columns)
-
-    def _row(self, values):
-        cells = []
-        for value, (_, _, width) in zip(values, self.columns):
-            cells.append(f" {str(value):>{width}} ")
-        return "|".join(cells)
+        metrics = (
+            f"loss: {_format_metric(logs.get('loss'))}"
+            f" - acc: {_format_metric(logs.get('accuracy'))}"
+            f" - f1: {_format_metric(logs.get('f1_score'))}"
+            f" - lr: {_format_learning_rate(self.model.optimizer)}"
+        )
+        line = (
+            f"\rEpoch {epoch + 1}/{self.total_epochs} "
+            f"[{bar}] {step_text} - {metrics}"
+        )
+        print(line, end="", flush=True)
 
 
 def print_key_value_table(title: str, values: dict):
@@ -738,7 +753,7 @@ def main():
             verbose=0
         ),
 
-        EpochTableLogger(),
+        CompactProgressLogger(),
     ]
 
     history = model.fit(
