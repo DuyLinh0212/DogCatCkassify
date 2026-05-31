@@ -57,6 +57,88 @@ class BinaryF1Score(tf.keras.metrics.Metric):
         self.reset_state()
 
 
+def _format_metric(value):
+    if value is None:
+        return "-"
+    try:
+        return f"{float(value):.4f}"
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _format_learning_rate(optimizer):
+    learning_rate = optimizer.learning_rate
+    if callable(learning_rate):
+        learning_rate = learning_rate(optimizer.iterations)
+    return _format_metric(tf.keras.backend.get_value(learning_rate))
+
+
+class EpochTableLogger(tf.keras.callbacks.Callback):
+    """
+    Print compact epoch metrics as a table instead of Keras progress bars.
+    """
+
+    columns = [
+        ("epoch", "Epoch", 7),
+        ("loss", "Loss", 9),
+        ("accuracy", "Acc", 8),
+        ("precision", "Prec", 8),
+        ("recall", "Recall", 8),
+        ("f1_score", "F1", 8),
+        ("auc", "AUC", 8),
+        ("val_loss", "ValLoss", 9),
+        ("val_accuracy", "ValAcc", 8),
+        ("val_f1_score", "ValF1", 8),
+        ("lr", "LR", 10),
+    ]
+
+    def on_train_begin(self, logs=None):
+        print("\nTRAINING LOG")
+        print(self._separator())
+        print(self._row([title for _, title, _ in self.columns]))
+        print(self._separator())
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        row_values = []
+
+        for key, _, _ in self.columns:
+            if key == "epoch":
+                row_values.append(str(epoch + 1))
+            elif key == "lr":
+                row_values.append(_format_learning_rate(self.model.optimizer))
+            else:
+                row_values.append(_format_metric(logs.get(key)))
+
+        print(self._row(row_values))
+
+    def on_train_end(self, logs=None):
+        print(self._separator())
+
+    def _separator(self):
+        return "+".join("-" * (width + 2) for _, _, width in self.columns)
+
+    def _row(self, values):
+        cells = []
+        for value, (_, _, width) in zip(values, self.columns):
+            cells.append(f" {str(value):>{width}} ")
+        return "|".join(cells)
+
+
+def print_key_value_table(title: str, values: dict):
+    key_width = max([len(str(key)) for key in values.keys()] + [6])
+    value_width = max([len(str(value)) for value in values.values()] + [5])
+    separator = f"+-{'-' * key_width}-+-{'-' * value_width}-+"
+
+    print(f"\n{title}")
+    print(separator)
+    print(f"| {'Metric':<{key_width}} | {'Value':>{value_width}} |")
+    print(separator)
+    for key, value in values.items():
+        print(f"| {str(key):<{key_width}} | {str(value):>{value_width}} |")
+    print(separator)
+
+
 def create_optimizer(optimizer_name: str, learning_rate: float):
     """
     Chọn optimizer Adam hoặc SGD.
@@ -572,6 +654,12 @@ def main():
         help="Learning rate"
     )
 
+    parser.add_argument(
+        "--show_model_summary",
+        action="store_true",
+        help="In model.summary() neu can xem chi tiet kien truc"
+    )
+
     args = parser.parse_args()
 
     data_dir = Path(args.data_dir)
@@ -580,15 +668,18 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     evaluation_dir.mkdir(parents=True, exist_ok=True)
 
-    print("========== CẤU HÌNH TRAIN ==========")
-    print(f"Dataset       : {data_dir}")
-    print(f"Output        : {output_dir}")
-    print(f"Evaluation    : {evaluation_dir}")
-    print(f"Epochs        : {args.epochs}")
-    print(f"Batch size    : {args.batch_size}")
-    print(f"Optimizer     : {args.optimizer}")
-    print(f"Learning rate : {args.learning_rate}")
-    print("====================================")
+    print_key_value_table(
+        "TRAIN CONFIG",
+        {
+            "Dataset": data_dir,
+            "Output": output_dir,
+            "Evaluation": evaluation_dir,
+            "Epochs": args.epochs,
+            "Batch size": args.batch_size,
+            "Optimizer": args.optimizer,
+            "Learning rate": args.learning_rate,
+        },
+    )
 
     dataset_bundle = load_processed_dataset(
         data_dir=data_dir,
@@ -611,7 +702,13 @@ def main():
 
     strategy = create_data_parallel_strategy()
 
-    print(f"Số GPU/replica đang dùng: {strategy.num_replicas_in_sync}")
+    print_key_value_table(
+        "RUNTIME",
+        {
+            "Replicas": strategy.num_replicas_in_sync,
+            "Classes": ", ".join(dataset_bundle.class_names),
+        },
+    )
 
     with strategy.scope():
         model = compile_cnn_model(
@@ -619,7 +716,8 @@ def main():
             learning_rate=args.learning_rate
         )
 
-    model.summary()
+    if args.show_model_summary:
+        model.summary()
 
     best_model_path = output_dir / "best_model.keras"
     final_model_path = output_dir / "final_model.keras"
@@ -630,41 +728,42 @@ def main():
             monitor="val_f1_score",
             save_best_only=True,
             mode="max",
-            verbose=1
+            verbose=0
         ),
 
         tf.keras.callbacks.EarlyStopping(
             monitor="val_loss",
             patience=5,
             restore_best_weights=True,
-            verbose=1
+            verbose=0
         ),
 
-        tf.keras.callbacks.ReduceLROnPlateau(
-            monitor="val_loss",
-            factor=0.5,
-            patience=2,
-            min_lr=1e-7,
-            verbose=1
-        ),
+        EpochTableLogger(),
     ]
 
     history = model.fit(
         dataset_bundle.train,
         validation_data=dataset_bundle.validation,
         epochs=args.epochs,
-        callbacks=callbacks
+        callbacks=callbacks,
+        verbose=0
     )
 
-    print("========== ĐÁNH GIÁ TEST ==========")
+    print("\nTEST EVALUATION")
 
     test_results = model.evaluate(
         dataset_bundle.test,
-        return_dict=True
+        return_dict=True,
+        verbose=0
     )
 
-    for metric_name, metric_value in test_results.items():
-        print(f"{metric_name}: {metric_value:.4f}")
+    print_key_value_table(
+        "TEST METRICS",
+        {
+            metric_name: _format_metric(metric_value)
+            for metric_name, metric_value in test_results.items()
+        },
+    )
 
     model.save(final_model_path)
 
