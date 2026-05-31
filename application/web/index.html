@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel Alpha - Phân loại Chó/Mèo cao cấp</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- TOP HEADER BAR -->
+        <header>
+            <div class="header-title-group">
+                <h1>Sentinel Alpha Classifier</h1>
+                <p>Hệ thống nhận diện và phân loại Chó/Mèo sử dụng Deep Learning</p>
+            </div>
+            <div class="status-badge" id="api-status-badge">
+                <div class="status-indicator" id="api-status-dot"></div>
+                <span id="api-status-text">Đang kết nối API...</span>
+            </div>
+        </header>
+
+        <!-- MAIN 2-COLUMN DASHBOARD GRID -->
+        <main class="main-grid">
+            
+            <!-- LEFT SIDEBAR: CONTROLS & SETTINGS -->
+            <section class="sidebar">
+                
+                <!-- MODEL SELECTION CARD -->
+                <div class="card">
+                    <div class="card-title">
+                        <span>Cấu hình Mô hình</span>
+                        <!-- Inline SVG gear icon -->
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="model-selector">Chọn Model đã huấn luyện</label>
+                        <select id="model-selector" class="select-input">
+                            <!-- Động nạp từ API -->
+                            <option value="" disabled selected>Đang quét các mô hình...</option>
+                        </select>
+                    </div>
+                    <div class="model-upload-row">
+                        <input type="file" id="model-upload-input" class="file-input" accept=".keras,.h5">
+                        <label id="btn-upload-model" class="btn btn-secondary btn-sm" for="model-upload-input">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                            Nhập model từ máy
+                        </label>
+                        <div class="model-upload-status" id="model-upload-status">Hỗ trợ .keras và .h5</div>
+                    </div>
+                    
+
+                </div>
+
+                <!-- PREDICTION HISTORY CARD -->
+                <div class="card">
+                    <div class="card-title">
+                        <span>Lịch sử phân tích</span>
+                        <div style="display: flex; gap: 8px;">
+                            <button id="export-csv-btn" class="btn btn-secondary btn-sm" title="Xuất báo cáo CSV" style="padding: 4px 8px;" disabled>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            </button>
+                            <button id="clear-history-btn" class="btn btn-danger btn-sm" title="Xóa lịch sử" style="padding: 4px 8px;" disabled>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="history-list" id="history-container">
+                        <div class="empty-history">Chưa có lịch sử phân tích trong phiên này</div>
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- RIGHT MAIN PANEL: INTERACTIVE WORKBENCH -->
+            <section class="workspace">
+                
+                <!-- WORK MODE TABS -->
+                <div class="tabs-container">
+                    <button class="tab-btn active" data-tab="single-tab">Phân tích ảnh đơn</button>
+                    <button class="tab-btn" data-tab="batch-tab">Phân tích hàng loạt (Batch)</button>
+                </div>
+
+                <!-- TAB CONTENT 1: SINGLE ANALYSIS -->
+                <div id="single-tab" class="tab-content active">
+                    
+                    <!-- UPLOAD & WORKBENCH GRID -->
+                    <div class="workbench-layout">
+                        
+                        <!-- LEFT PANEL: DROPZONE & IMAGE PREVIEW -->
+                        <div class="card">
+                            <div class="card-title">Khu vực nguồn ảnh</div>
+                            
+                            <div class="dropzone" id="single-dropzone">
+                                <div class="dropzone-icon">
+                                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                                </div>
+                                <div class="dropzone-text">
+                                    <h3>Kéo thả ảnh vào đây</h3>
+                                    <p>hoặc nhấn để chọn từ thư mục máy tính</p>
+                                </div>
+                                <input type="file" id="single-file-input" class="file-input" accept="image/*">
+                            </div>
+
+                            <div class="preview-container" id="single-preview-container" style="display: none;">
+                                <img src="" alt="Xem trước" class="preview-image" id="single-preview-img">
+                                <div class="image-meta-badge" id="single-meta-badge">0 x 0</div>
+                            </div>
+
+                            <div style="display: flex; gap: var(--space-base); width: 100%; margin-top: 8px;">
+                                <button id="btn-predict" class="btn btn-primary" style="flex: 1;" disabled>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                    Phân loại ảnh
+                                </button>
+                                <button id="btn-clear-single" class="btn btn-secondary" style="display: none;">Xóa ảnh</button>
+                            </div>
+                        </div>
+
+                        <!-- RIGHT PANEL: DETAILED METRICS -->
+                        <div class="card" id="results-card">
+                            <div class="card-title">Kết quả Phân tích</div>
+                            
+                            <!-- Placeholder when no prediction has run -->
+                            <div class="preview-placeholder" id="results-placeholder">
+                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                                <p class="body-sm">Vui lòng tải ảnh lên và nhấn <strong>Phân loại ảnh</strong> để bắt đầu phân tích bằng Deep Learning.</p>
+                            </div>
+
+                            <!-- Live visual metrics pane -->
+                            <div class="prediction-panel" id="results-pane" style="display: none;">
+                                
+                                <div class="prediction-hero" id="result-hero-card">
+                                    <div class="prediction-icon" id="result-class-icon">🐾</div>
+                                    <div class="prediction-label-group">
+                                        <div class="prediction-class" id="result-class-label">-</div>
+                                        <div class="prediction-confidence">
+                                            Độ tin cậy: <strong id="result-confidence-val" style="color: var(--color-on-surface); font-size: 16px;">0%</strong>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="gauge-wrapper">
+                                    <div class="gauge-header">
+                                        <span>Phân bố độ tin cậy</span>
+                                        <span id="gauge-conf-percent">0%</span>
+                                    </div>
+                                    <div class="gauge-bar-outer">
+                                        <div class="gauge-bar-inner" id="gauge-bar-fill"></div>
+                                    </div>
+                                    <div class="slider-labels" style="margin-top: 2px;">
+                                        <span>Cực kỳ giống Mèo</span>
+                                        <span>Cực kỳ giống Chó</span>
+                                    </div>
+                                </div>
+
+                                <table class="metadata-table">
+                                    <tbody>
+                                        <tr>
+                                            <td>Trạng thái phân tích</td>
+                                            <td><span class="chip" style="background-color: var(--color-tertiary-container); color: var(--color-on-tertiary-container);">Thành công</span></td>
+                                        </tr>
+                                        <tr>
+                                            <td>Độ trễ suy luận (Latency)</td>
+                                            <td id="meta-latency">- ms</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Điểm Raw Sigmoid</td>
+                                            <td id="meta-raw-score">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Thiết bị phần cứng</td>
+                                            <td><span class="chip" id="meta-hardware">-</span></td>
+                                        </tr>
+                                        <tr>
+                                            <td>Kích thước xử lý CNN</td>
+                                            <td>224 x 224 px (RGB)</td>
+                                        </tr>
+                                        <tr>
+                                            <td>Kích thước ảnh gốc</td>
+                                            <td id="meta-resolution">-</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- TAB CONTENT 2: BATCH ANALYSIS -->
+                <div id="batch-tab" class="tab-content">
+                    
+                    <div class="card">
+                        <div class="card-title">Phân tích hàng loạt nhiều ảnh cùng lúc</div>
+                        
+                        <div class="dropzone" id="batch-dropzone">
+                            <div class="dropzone-icon">
+                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="8" y="8" width="14" height="14" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+                            </div>
+                            <div class="dropzone-text">
+                                <h3>Kéo thả nhiều ảnh vào đây</h3>
+                                <p>hỗ trợ kéo thả đồng thời nhiều tệp tin hoặc nhấn để chọn</p>
+                            </div>
+                            <input type="file" id="batch-file-input" class="file-input" accept="image/*" multiple>
+                        </div>
+                    </div>
+
+                    <!-- BATCH INTERACTIVE WORKSPACE -->
+                    <div class="card" id="batch-results-card" style="display: none;">
+                        <div class="batch-controls">
+                            <div class="batch-summary">
+                                <div class="batch-summary-item">
+                                    <span>Tổng số ảnh:</span>
+                                    <strong id="batch-total-count">0</strong>
+                                </div>
+                                <div class="batch-summary-item" style="color: var(--color-primary);">
+                                    <span>Chó:</span>
+                                    <strong id="batch-dog-count">0</strong>
+                                </div>
+                                <div class="batch-summary-item" style="color: var(--color-tertiary);">
+                                    <span>Mèo:</span>
+                                    <strong id="batch-cat-count">0</strong>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: var(--space-base);">
+                                <button id="btn-batch-predict" class="btn btn-primary btn-sm">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                    Bắt đầu phân loại
+                                </button>
+                                <button id="btn-clear-batch" class="btn btn-secondary btn-sm">Xóa danh sách</button>
+                            </div>
+                        </div>
+
+                        <!-- Progress indicator bar for bulk classification -->
+                        <div class="gauge-wrapper" id="batch-overall-progress-wrapper" style="display: none; padding: 4px 0;">
+                            <div class="gauge-header">
+                                <span id="batch-progress-label">Đang phân tích: 0/0 ảnh...</span>
+                                <span id="batch-progress-percent">0%</span>
+                            </div>
+                            <div class="gauge-bar-outer" style="height: 6px;">
+                                <div class="gauge-bar-inner dog" id="batch-progress-bar-fill" style="width: 0%;"></div>
+                            </div>
+                        </div>
+
+                        <div class="batch-table-container">
+                            <table class="batch-table" id="batch-table-list">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 70px;">Ảnh</th>
+                                        <th>Tên file</th>
+                                        <th style="width: 130px;">Kích thước gốc</th>
+                                        <th style="width: 140px; text-align: center;">Phân loại</th>
+                                        <th style="width: 110px; text-align: right;">Độ tin cậy</th>
+                                        <th style="width: 100px; text-align: right;">Độ trễ</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="batch-table-body">
+                                    <!-- Dynamic rows from JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+
+            </section>
+
+        </main>
+    </div>
+
+    <!-- MAIN CLIENT LOGIC SCRIPT -->
+    <script src="js/app.js?v=2"></script>
+</body>
+</html>
