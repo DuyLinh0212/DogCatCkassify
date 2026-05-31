@@ -7,6 +7,36 @@ from tensorflow.keras import layers, models
 INPUT_SHAPE = (224, 224, 3)
 
 
+@tf.keras.utils.register_keras_serializable(package="CNNDogCat")
+class SpatialAttention(layers.Layer):
+    """Lightweight spatial attention block for CNN feature maps."""
+
+    def __init__(self, kernel_size: int = 7, **kwargs):
+        super().__init__(**kwargs)
+        if kernel_size % 2 == 0:
+            raise ValueError("kernel_size must be odd for same-padding attention.")
+
+        self.kernel_size = kernel_size
+        self.attention_conv = layers.Conv2D(
+            filters=1,
+            kernel_size=kernel_size,
+            padding="same",
+            activation="sigmoid",
+            use_bias=False,
+        )
+
+    def call(self, inputs):
+        avg_pool = tf.reduce_mean(inputs, axis=-1, keepdims=True)
+        max_pool = tf.reduce_max(inputs, axis=-1, keepdims=True)
+        attention_map = self.attention_conv(tf.concat([avg_pool, max_pool], axis=-1))
+        return inputs * attention_map
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({"kernel_size": self.kernel_size})
+        return config
+
+
 def create_data_parallel_strategy() -> tf.distribute.Strategy:
     """Tạo chiến lược data parallel cho Kaggle hoặc máy có nhiều GPU."""
     gpus = tf.config.list_physical_devices("GPU")
@@ -70,11 +100,12 @@ def build_cnn_model(
             # Khối tích chập 4: gom đặc trưng cấp cao trước khi phân loại.
             layers.Conv2D(256, (3, 3), padding="same", activation="relu"),
             layers.BatchNormalization(),
+            SpatialAttention(name="spatial_attention"),
             layers.MaxPooling2D((2, 2)),
             layers.Dropout(0.35),
 
             layers.GlobalAveragePooling2D(),
-            layers.Dense(256, activation="relu"),
+            layers.Dense(256, activation="sigmoid"),
             layers.BatchNormalization(),
             layers.Dropout(0.45),
             layers.Dense(output_units, activation=output_activation),
