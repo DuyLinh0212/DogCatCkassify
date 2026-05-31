@@ -8,13 +8,20 @@ import sys
 import time
 from pathlib import Path
 
-os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 
 tf.get_logger().setLevel("ERROR")
+tf.config.optimizer.set_experimental_options({"layout_optimizer": False})
+try:
+    from absl import logging as absl_logging
+
+    absl_logging.set_verbosity(absl_logging.ERROR)
+except ImportError:
+    pass
 
 
 # Cho phép import từ thư mục gốc project
@@ -84,9 +91,17 @@ class CompactProgressLogger(tf.keras.callbacks.Callback):
     Print a compact progress bar with only the most useful training metrics.
     """
 
-    def __init__(self, bar_width: int = 24):
+    def __init__(
+        self,
+        bar_width: int = 16,
+        monitor: str = "val_f1_score",
+        best_model_path: Path | None = None,
+    ):
         super().__init__()
         self.bar_width = bar_width
+        self.monitor = monitor
+        self.best_model_path = best_model_path
+        self.best_value = float("-inf")
         self.total_epochs = 0
         self.steps = None
         self.epoch_start_time = 0.0
@@ -108,11 +123,19 @@ class CompactProgressLogger(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         logs = logs or {}
         elapsed = time.time() - self.epoch_start_time
+        best_message = ""
+        current_value = logs.get(self.monitor)
+
+        if current_value is not None and float(current_value) > self.best_value:
+            self.best_value = float(current_value)
+            best_message = " - saved best"
+
         summary = (
-            f" - val_loss: {_format_metric(logs.get('val_loss'))}"
-            f" - val_acc: {_format_metric(logs.get('val_accuracy'))}"
-            f" - val_f1: {_format_metric(logs.get('val_f1_score'))}"
+            f" | val_loss={_format_metric(logs.get('val_loss'))}"
+            f" val_acc={_format_metric(logs.get('val_accuracy'))}"
+            f" val_f1={_format_metric(logs.get('val_f1_score'))}"
             f" - {elapsed:.1f}s"
+            f"{best_message}"
         )
         self._render(epoch, self.steps, logs)
         print(summary)
@@ -128,14 +151,13 @@ class CompactProgressLogger(tf.keras.callbacks.Callback):
             step_text = str(step or 0)
 
         metrics = (
-            f"loss: {_format_metric(logs.get('loss'))}"
-            f" - acc: {_format_metric(logs.get('accuracy'))}"
-            f" - f1: {_format_metric(logs.get('f1_score'))}"
-            f" - lr: {_format_learning_rate(self.model.optimizer)}"
+            f"loss={_format_metric(logs.get('loss'))}"
+            f" acc={_format_metric(logs.get('accuracy'))}"
+            f" f1={_format_metric(logs.get('f1_score'))}"
         )
         line = (
             f"\rEpoch {epoch + 1}/{self.total_epochs} "
-            f"[{bar}] {step_text} - {metrics}"
+            f"[{bar}] {step_text} | {metrics}"
         )
         print(line, end="", flush=True)
 
@@ -675,6 +697,13 @@ def main():
         help="In model.summary() neu can xem chi tiet kien truc"
     )
 
+    parser.add_argument(
+        "--early_stopping_patience",
+        type=int,
+        default=10,
+        help="So epoch cho EarlyStopping theo val_f1_score"
+    )
+
     args = parser.parse_args()
 
     data_dir = Path(args.data_dir)
@@ -693,6 +722,7 @@ def main():
             "Batch size": args.batch_size,
             "Optimizer": args.optimizer,
             "Learning rate": args.learning_rate,
+            "Early stopping": f"val_f1_score patience={args.early_stopping_patience}",
         },
     )
 
@@ -747,13 +777,15 @@ def main():
         ),
 
         tf.keras.callbacks.EarlyStopping(
-            monitor="val_loss",
-            patience=5,
+            monitor="val_f1_score",
+            mode="max",
+            patience=args.early_stopping_patience,
+            min_delta=1e-4,
             restore_best_weights=True,
             verbose=0
         ),
 
-        CompactProgressLogger(),
+        CompactProgressLogger(best_model_path=best_model_path),
     ]
 
     history = model.fit(
@@ -822,6 +854,8 @@ def main():
         "batch_size": args.batch_size,
         "optimizer": args.optimizer,
         "learning_rate": args.learning_rate,
+        "early_stopping_monitor": "val_f1_score",
+        "early_stopping_patience": args.early_stopping_patience,
         "test_results": {
             key: float(value)
             for key, value in test_results.items()
